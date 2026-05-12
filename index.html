@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lectura Musical - Nivel 1</title>
+
+<style>
+
+body{
+  margin:0;
+  font-family:system-ui;
+  background:#1f7a3d;
+  overflow:hidden;
+  color:#fff;
+}
+
+.app{
+  height:100vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:10px;
+  padding:10px;
+}
+
+.score{
+  font-size:24px;
+  font-weight:900;
+}
+
+.progressWrap{
+  width:80%;
+  height:12px;
+  background:#1d4d2e;
+  border-radius:999px;
+  overflow:hidden;
+}
+
+.progress{
+  height:100%;
+  width:0%;
+  background:#7dff9d;
+  transition:.3s;
+}
+
+.sheet{
+  width:100%;
+  max-height:50vh;
+  background:#fff;
+  border-radius:16px;
+  position:relative;
+  overflow:hidden;
+}
+
+svg{
+  width:100%;
+  height:100%;
+}
+
+.playhead{
+  position:absolute;
+  top:10px;
+  bottom:10px;
+  width:4px;
+  background:red;
+  opacity:0;
+  transition:left .15s linear;
+}
+
+.options{
+  margin-top:70px;
+  display:flex;
+  justify-content:center;
+  gap:16px;
+  flex-wrap:wrap;
+}
+
+.opt{
+  min-width:90px;
+  padding:14px 20px;
+  background:#fff;
+  border:3px solid #ddd;
+  border-radius:12px;
+  font-weight:900;
+  font-size:20px;
+  cursor:pointer;
+  transition:.15s;
+}
+
+.opt:hover{
+  transform:scale(1.05);
+}
+
+.confetti{
+  position:fixed;
+  border-radius:2px;
+  animation:confetti 1.2s ease-out forwards;
+  z-index:9999;
+}
+
+@keyframes confetti{
+  0%{
+    opacity:1;
+    transform:translate(0,0) rotate(0deg);
+  }
+
+  100%{
+    opacity:0;
+    transform:
+      translate(var(--dx),var(--dy))
+      rotate(720deg);
+  }
+}
+
+.final{
+  position:absolute;
+  inset:0;
+  background:#000c;
+  display:none;
+  justify-content:center;
+  align-items:center;
+  flex-direction:column;
+  gap:20px;
+  z-index:20;
+}
+
+.final h2{
+  font-size:42px;
+  margin:0;
+}
+
+.final button{
+  padding:14px 24px;
+  border:none;
+  border-radius:12px;
+  font-size:18px;
+  font-weight:900;
+  cursor:pointer;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+<div class="score" id="score">0 pts</div>
+
+<div class="progressWrap">
+  <div class="progress" id="progress"></div>
+</div>
+
+<div class="sheet">
+
+<div class="playhead" id="playhead"></div>
+
+<svg viewBox="0 0 760 260">
+
+<g stroke="#000" stroke-width="2">
+  <line x1="40" y1="80" x2="720" y2="80"/>
+  <line x1="40" y1="105" x2="720" y2="105"/>
+  <line x1="40" y1="130" x2="720" y2="130"/>
+  <line x1="40" y1="155" x2="720" y2="155"/>
+  <line x1="40" y1="180" x2="720" y2="180"/>
+</g>
+
+<text x="50" y="150" font-size="50">𝄞</text>
+
+<g id="notes"></g>
+
+</svg>
+</div>
+
+<button onclick="playSeq()">▶</button>
+
+<div class="options">
+  <button class="opt" id="o0"></button>
+  <button class="opt" id="o1"></button>
+  <button class="opt" id="o2"></button>
+</div>
+
+</div>
+
+<div class="final" id="final">
+
+<h2>Resultado</h2>
+
+<div id="finalScore"></div>
+
+<button onclick="downloadPDF()">
+Descargar PDF
+</button>
+
+</div>
+
+<script>
+
+/* ===== DOM ===== */
+
+const notes = document.getElementById("notes");
+const scoreEl = document.getElementById("score");
+const progress = document.getElementById("progress");
+const final = document.getElementById("final");
+const finalScore = document.getElementById("finalScore");
+const playhead = document.getElementById("playhead");
+
+/* ===== CONFIG ===== */
+
+const MAP = {
+  do:"do_negra.mp3",
+  re:"re_negra.mp3",
+  mi:"mi_negra.mp3",
+  fa:"fa_negra.mp3"
+};
+
+const NOTES = Object.keys(MAP);
+
+const OFF = {
+  do:+2,
+  re:+1,
+  mi:0,
+  fa:-1
+};
+
+const lineGap = 25;
+
+/* ===== AUDIO ===== */
+
+let ctx = new AudioContext();
+let cache = {};
+
+async function load(n){
+
+  if(cache[n]) return cache[n];
+
+  let res = await fetch(MAP[n]);
+  let buf = await res.arrayBuffer();
+  let dec = await ctx.decodeAudioData(buf);
+
+  cache[n] = dec;
+
+  return dec;
+}
+
+function playBuffer(buf,t){
+
+  let s = ctx.createBufferSource();
+
+  s.buffer = buf;
+
+  s.connect(ctx.destination);
+
+  s.start(t);
+
+  return buf.duration;
+}
+
+/* ===== PLAYHEAD ===== */
+
+function movePlayhead(x){
+
+  const px =
+  (x/760)
+  * document.querySelector(".sheet").clientWidth;
+
+  playhead.style.left = px+"px";
+}
+
+/* ===== PLAY ===== */
+
+async function playSeq(){
+
+  let t = ctx.currentTime;
+
+  playhead.style.opacity = 1;
+
+  for(let i=0;i<seq.length;i++){
+
+    movePlayhead(260+i*100);
+
+    let b = await load(seq[i]);
+
+    t += playBuffer(b,t)+0.05;
+  }
+
+  setTimeout(()=>{
+
+    playhead.style.opacity = 0;
+    playhead.style.left = "0px";
+
+  },400);
+}
+
+/* ===== FX ===== */
+
+const audioCtx = new AudioContext();
+
+function soundOk(){
+
+  let o = audioCtx.createOscillator();
+  let g = audioCtx.createGain();
+
+  o.frequency.value = 900;
+
+  g.gain.value = 0.25;
+
+  o.connect(g).connect(audioCtx.destination);
+
+  o.start();
+
+  o.stop(audioCtx.currentTime+0.15);
+}
+
+function soundFail(){
+
+  let o = audioCtx.createOscillator();
+  let g = audioCtx.createGain();
+
+  o.frequency.value = 180;
+
+  g.gain.value = 0.25;
+
+  o.connect(g).connect(audioCtx.destination);
+
+  o.start();
+
+  o.stop(audioCtx.currentTime+0.25);
+}
+
+/* ===== POS ===== */
+
+function yFor(n){
+
+  return 180 + OFF[n]*(lineGap/2);
+}
+
+/* ===== DRAW ===== */
+
+function draw(){
+
+  notes.innerHTML = "";
+
+  seq.forEach((n,i)=>{
+
+    let x = 260+i*100;
+
+    let y = yFor(n);
+
+    let r = lineGap/2;
+
+    let html = "";
+
+    if(OFF[n]%2===0){
+
+      html += `
+      <line
+      x1="${x-r}"
+      y1="${y}"
+      x2="${x+r}"
+      y2="${y}"
+      stroke="black"/>`;
+    }
+
+    if(n==="do"){
+
+      html += `
+      <line
+      x1="${x-20}"
+      y1="${y}"
+      x2="${x+20}"
+      y2="${y}"
+      stroke="black"/>`;
+    }
+
+    html += `
+    <circle
+    cx="${x}"
+    cy="${y}"
+    r="${r}"
+    fill="white"
+    stroke="black"/>`;
+
+    notes.innerHTML += html;
+  });
+}
+
+/* ===== GAME ===== */
+
+function rand(){
+
+  return NOTES[
+    Math.floor(Math.random()*NOTES.length)
+  ];
+}
+
+function gen(correct){
+
+  let arr=[correct];
+
+  while(arr.length<3){
+
+    let n = rand();
+
+    if(!arr.includes(n)) arr.push(n);
+  }
+
+  return arr.sort(()=>Math.random()-0.5);
+}
+
+function update(){
+
+  let c = seq[seq.length-1];
+
+  let opts = gen(c);
+
+  opts.forEach((o,i)=>{
+
+    let b = document.getElementById("o"+i);
+
+    b.textContent = o;
+
+    b.onclick = ()=>answer(o,c,b);
+  });
+}
+
+/* ===== SUPER CONFETI ===== */
+
+function confetti(el){
+
+  let r = el.getBoundingClientRect();
+
+  const colors = [
+    "#ff4757",
+    "#ffa502",
+    "#2ed573",
+    "#1e90ff",
+    "#eccc68",
+    "#ff6b81",
+    "#70a1ff",
+    "#7bed9f"
+  ];
+
+  for(let i=0;i<80;i++){
+
+    let c = document.createElement("div");
+
+    c.className = "confetti";
+
+    let size = Math.random()*14+6;
+
+    c.style.width = size+"px";
+    c.style.height = size+"px";
+
+    c.style.left =
+      (r.left+r.width/2)+"px";
+
+    c.style.top =
+      (r.top+r.height/2)+"px";
+
+    c.style.background =
+      colors[
+        Math.floor(Math.random()*colors.length)
+      ];
+
+    c.style.setProperty(
+      "--dx",
+      (Math.random()*500-250)+"px"
+    );
+
+    c.style.setProperty(
+      "--dy",
+      (Math.random()*-500+200)+"px"
+    );
+
+    document.body.appendChild(c);
+
+    setTimeout(()=>{
+      c.remove();
+    },1200);
+  }
+}
+
+/* ===== STATE ===== */
+
+let seq = [];
+let step = 0;
+let round = 0;
+let score = 0;
+
+let logs = [];
+
+/* ===== ANSWER ===== */
+
+function answer(a,c,b){
+
+  let ok = a===c;
+
+  logs.push({
+    round,
+    step,
+    correct:c,
+    answer:a,
+    ok
+  });
+
+  if(ok){
+
+    score += 100;
+
+    confetti(b);
+
+    soundOk();
+
+    next();
+
+  }else{
+
+    score -= 50;
+
+    soundFail();
+  }
+
+  scoreEl.textContent = score+" pts";
+}
+
+/* ===== NEXT ===== */
+
+function next(){
+
+  if(seq.length===0){
+
+    seq=[rand()];
+
+  }else if(seq.length===1){
+
+    seq.push(rand());
+
+  }else if(seq.length===2){
+
+    seq.push(rand());
+
+  }else{
+
+    seq=[rand()];
+
+    round++;
+
+    progress.style.width =
+      (round/6*100)+"%";
+  }
+
+  step++;
+
+  if(round>=6){
+
+    final.style.display="flex";
+
+    finalScore.textContent =
+      score+" pts";
+
+    return;
+  }
+
+  draw();
+
+  update();
+}
+
+/* ===== PDF ===== */
+
+function downloadPDF(){
+
+  let text = "";
+
+  text += "NIVEL 1\n";
+  text += "====================\n\n";
+
+  text += "RESULTADO FINAL\n\n";
+
+  text +=
+  "Puntuación: "
+  +score+
+  " pts\n\n";
+
+  let currentRound = -1;
+
+  logs.forEach(l=>{
+
+    if(l.round !== currentRound){
+
+      currentRound = l.round;
+
+      text +=
+      "\nTANDA "
+      +(currentRound+1)
+      +"\n";
+    }
+
+    text +=
+    "Nota: "
+    +l.correct+
+    " → "
+    +(l.ok
+      ? "ACIERTO"
+      : "FALLO (respondió "+l.answer+")")
+    +"\n";
+  });
+
+  const win =
+  window.open("", "_blank");
+
+  win.document.write(
+    "<pre style='font-size:18px;font-family:monospace'>"
+    +text+
+    "</pre>"
+  );
+
+  win.print();
+}
+
+/* ===== START ===== */
+
+next();
+
+</script>
+
+</body>
+</html>

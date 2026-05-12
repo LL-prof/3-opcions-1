@@ -58,16 +58,6 @@ svg{
   height:100%;
 }
 
-.playhead{
-  position:absolute;
-  top:10px;
-  bottom:10px;
-  width:4px;
-  background:red;
-  opacity:0;
-  transition:left .15s linear;
-}
-
 .options{
   margin-top:70px;
   display:flex;
@@ -100,9 +90,12 @@ svg{
 }
 
 @keyframes confetti{
+
   0%{
     opacity:1;
-    transform:translate(0,0) rotate(0deg);
+    transform:
+      translate(0,0)
+      rotate(0deg);
   }
 
   100%{
@@ -154,8 +147,6 @@ svg{
 
 <div class="sheet">
 
-<div class="playhead" id="playhead"></div>
-
 <svg viewBox="0 0 760 260">
 
 <g stroke="#000" stroke-width="2">
@@ -172,8 +163,6 @@ svg{
 
 </svg>
 </div>
-
-<button onclick="playSeq()">▶</button>
 
 <div class="options">
   <button class="opt" id="o0"></button>
@@ -204,7 +193,6 @@ const scoreEl = document.getElementById("score");
 const progress = document.getElementById("progress");
 const final = document.getElementById("final");
 const finalScore = document.getElementById("finalScore");
-const playhead = document.getElementById("playhead");
 
 /* ===== CONFIG ===== */
 
@@ -229,17 +217,23 @@ const lineGap = 25;
 /* ===== AUDIO ===== */
 
 let ctx = new AudioContext();
+
 let cache = {};
+
+const victory = new Audio("victoria.mp3");
+const incorrect = new Audio("incorrecto.mp3");
 
 async function load(n){
 
   if(cache[n]) return cache[n];
 
   let res = await fetch(MAP[n]);
+
   let buf = await res.arrayBuffer();
+
   let dec = await ctx.decodeAudioData(buf);
 
-  cache[n] = dec;
+  cache[n]=dec;
 
   return dec;
 }
@@ -257,65 +251,23 @@ function playBuffer(buf,t){
   return buf.duration;
 }
 
-/* ===== PLAYHEAD ===== */
+/* ===== PLAY NOTE ===== */
 
-function movePlayhead(x){
+async function playNote(note){
 
-  const px =
-  (x/760)
-  * document.querySelector(".sheet").clientWidth;
+  let b = await load(note);
 
-  playhead.style.left = px+"px";
+  playBuffer(b,ctx.currentTime);
 }
 
-/* ===== PLAY ===== */
-
-async function playSeq(){
-
-  let t = ctx.currentTime;
-
-  playhead.style.opacity = 1;
-
-  for(let i=0;i<seq.length;i++){
-
-    movePlayhead(260+i*100);
-
-    let b = await load(seq[i]);
-
-    t += playBuffer(b,t)+0.05;
-  }
-
-  setTimeout(()=>{
-
-    playhead.style.opacity = 0;
-    playhead.style.left = "0px";
-
-  },400);
-}
-
-/* ===== FX ===== */
+/* ===== FAIL SOUND ===== */
 
 const audioCtx = new AudioContext();
-
-function soundOk(){
-
-  let o = audioCtx.createOscillator();
-  let g = audioCtx.createGain();
-
-  o.frequency.value = 900;
-
-  g.gain.value = 0.25;
-
-  o.connect(g).connect(audioCtx.destination);
-
-  o.start();
-
-  o.stop(audioCtx.currentTime+0.15);
-}
 
 function soundFail(){
 
   let o = audioCtx.createOscillator();
+
   let g = audioCtx.createGain();
 
   o.frequency.value = 180;
@@ -401,7 +353,7 @@ function gen(correct){
 
   while(arr.length<3){
 
-    let n = rand();
+    let n=rand();
 
     if(!arr.includes(n)) arr.push(n);
   }
@@ -485,15 +437,18 @@ function confetti(el){
 /* ===== STATE ===== */
 
 let seq = [];
+
 let step = 0;
+
 let round = 0;
+
 let score = 0;
 
 let logs = [];
 
 /* ===== ANSWER ===== */
 
-function answer(a,c,b){
+async function answer(a,c,b){
 
   let ok = a===c;
 
@@ -511,18 +466,25 @@ function answer(a,c,b){
 
     confetti(b);
 
-    soundOk();
+    await victory.play();
 
-    next();
+    setTimeout(async ()=>{
+
+      await playNote(c);
+
+      next();
+
+    },350);
 
   }else{
 
     score -= 50;
 
-    soundFail();
+    incorrect.play();
   }
 
-  scoreEl.textContent = score+" pts";
+  scoreEl.textContent =
+    score+" pts";
 }
 
 /* ===== NEXT ===== */

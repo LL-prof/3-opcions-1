@@ -255,6 +255,8 @@ function playBuffer(buf,t){
 
 async function playNote(note){
 
+  await ctx.resume();
+
   let b = await load(note);
 
   playBuffer(b,ctx.currentTime);
@@ -470,9 +472,11 @@ async function answer(a,c,b){
 
     setTimeout(async ()=>{
 
-      await playNote(c);
+     await playNote(c);
 
-      next();
+     setTimeout(()=>{
+       next();
+     },700);
 
     },350);
 

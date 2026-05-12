@@ -75,7 +75,8 @@ svg{
   font-weight:900;
   font-size:20px;
   cursor:pointer;
-  transition:.15s;
+  transition:.2s;
+  color:#000;
 }
 
 .opt:hover{
@@ -162,6 +163,7 @@ svg{
 <g id="notes"></g>
 
 </svg>
+
 </div>
 
 <div class="options">
@@ -221,7 +223,10 @@ let ctx = new AudioContext();
 let cache = {};
 
 const victory = new Audio("victoria.mp3");
+
 const incorrect = new Audio("incorrecto.mp3");
+
+/* ===== LOAD ===== */
 
 async function load(n){
 
@@ -233,10 +238,12 @@ async function load(n){
 
   let dec = await ctx.decodeAudioData(buf);
 
-  cache[n]=dec;
+  cache[n] = dec;
 
   return dec;
 }
+
+/* ===== PLAY BUFFER ===== */
 
 function playBuffer(buf,t){
 
@@ -248,7 +255,7 @@ function playBuffer(buf,t){
 
   s.start(t);
 
-  return buf.duration;
+  return s;
 }
 
 /* ===== PLAY NOTE ===== */
@@ -259,28 +266,12 @@ async function playNote(note){
 
   let b = await load(note);
 
-  playBuffer(b,ctx.currentTime);
-}
+  let s = playBuffer(b,ctx.currentTime);
 
-/* ===== FAIL SOUND ===== */
+  return new Promise(resolve=>{
 
-const audioCtx = new AudioContext();
-
-function soundFail(){
-
-  let o = audioCtx.createOscillator();
-
-  let g = audioCtx.createGain();
-
-  o.frequency.value = 180;
-
-  g.gain.value = 0.25;
-
-  o.connect(g).connect(audioCtx.destination);
-
-  o.start();
-
-  o.stop(audioCtx.currentTime+0.25);
+    s.onended = resolve;
+  });
 }
 
 /* ===== POS ===== */
@@ -340,7 +331,7 @@ function draw(){
   });
 }
 
-/* ===== GAME ===== */
+/* ===== RANDOM ===== */
 
 function rand(){
 
@@ -355,13 +346,15 @@ function gen(correct){
 
   while(arr.length<3){
 
-    let n=rand();
+    let n = rand();
 
     if(!arr.includes(n)) arr.push(n);
   }
 
   return arr.sort(()=>Math.random()-0.5);
 }
+
+/* ===== UPDATE BUTTONS ===== */
 
 function update(){
 
@@ -379,7 +372,7 @@ function update(){
   });
 }
 
-/* ===== SUPER CONFETI ===== */
+/* ===== CONFETTI ===== */
 
 function confetti(el){
 
@@ -448,9 +441,46 @@ let score = 0;
 
 let logs = [];
 
+let locked = false;
+
+/* ===== HELPERS ===== */
+
+function lockButtons(){
+
+  locked = true;
+
+  document.querySelectorAll(".opt").forEach(b=>{
+
+    b.disabled = true;
+
+    b.style.opacity = 0.4;
+  });
+}
+
+function unlockButtons(){
+
+  locked = false;
+
+  document.querySelectorAll(".opt").forEach(b=>{
+
+    b.disabled = false;
+
+    b.style.opacity = 1;
+  });
+}
+
+function wait(ms){
+
+  return new Promise(r=>setTimeout(r,ms));
+}
+
 /* ===== ANSWER ===== */
 
 async function answer(a,c,b){
+
+  if(locked) return;
+
+  lockButtons();
 
   let ok = a===c;
 
@@ -468,27 +498,31 @@ async function answer(a,c,b){
 
     confetti(b);
 
+    victory.currentTime = 0;
+
     await victory.play();
-
-    setTimeout(async ()=>{
-
-     await playNote(c);
-
-     setTimeout(()=>{
-       next();
-     },700);
-
-    },350);
 
   }else{
 
     score -= 50;
 
-    incorrect.play();
+    incorrect.currentTime = 0;
+
+    await incorrect.play();
   }
 
   scoreEl.textContent =
     score+" pts";
+
+  await wait(1000);
+
+  await playNote(c);
+
+  await wait(500);
+
+  next();
+
+  unlockButtons();
 }
 
 /* ===== NEXT ===== */

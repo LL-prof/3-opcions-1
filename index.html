@@ -502,6 +502,19 @@ async function answer(a,c,b){
 
     await victory.play();
 
+    scoreEl.textContent =
+      score+" pts";
+
+    await wait(1000);
+
+    await playNote(c);
+
+    await wait(500);
+
+    next();
+
+    unlockButtons();
+
   }else{
 
     score -= 50;
@@ -509,20 +522,20 @@ async function answer(a,c,b){
     incorrect.currentTime = 0;
 
     await incorrect.play();
+
+    scoreEl.textContent =
+      score+" pts";
+
+    await wait(1000);
+
+    await playNote(c);
+
+    await wait(500);
+
+    unlockButtons();
+
+    return;
   }
-
-  scoreEl.textContent =
-    score+" pts";
-
-  await wait(1000);
-
-  await playNote(c);
-
-  await wait(500);
-
-  next();
-
-  unlockButtons();
 }
 
 /* ===== NEXT ===== */
